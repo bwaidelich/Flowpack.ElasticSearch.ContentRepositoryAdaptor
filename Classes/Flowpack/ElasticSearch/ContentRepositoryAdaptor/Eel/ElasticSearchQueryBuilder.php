@@ -320,8 +320,51 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
 	}
 
 	/**
+	 * Adds a phrase match filter for the given property
+	 *
+	 * @param string $property
+	 * @param mixed $value
+	 * @param string $analyzer
+	 * @param bool $skipEmptyValue
+	 * @return ElasticSearchQueryBuilder
+	 * @throws QueryBuildingException
+	 */
+	public function matchPhrase($property, $value, $analyzer = NULL, $skipEmptyValue = FALSE) {
+		if (empty($value) && $skipEmptyValue) {
+			return $this;
+		} else {
+			return $this->queryMatch($property, $value, 'phrase', empty($analyzer) ? [] : ['analyzer' => $analyzer]);
+		}
+	}
+
+	/**
 	 * LOW-LEVEL API
 	 */
+
+	/**
+	 * Adds a filter to query.filtered.query
+	 *
+	 * @param string $property
+	 * @param mixed $value
+	 * @param string $matchType
+	 * @param array $options
+	 * @throws QueryBuildingException
+	 * @return ElasticSearchQueryBuilder
+	 * @api
+	 */
+	public function queryMatch($property, $value, $matchType = 'phrase', array $options = []) {
+		if (!in_array($matchType, array('boolean', 'phrase', 'phrase_prefix'))) {
+			throw new QueryBuildingException('The given match type "' . $matchType . '" is not supported. Must be one of "boolean", "phrase", "phrase_prefix".', 1436521987);
+		}
+		return $this->appendAtPath('query.filtered.query.bool.must', [
+			'match' => [
+				$property => array_merge($options, [
+					'query' => $value,
+					'type' => $matchType
+				])
+			]
+		]);
+	}
 
 	/**
 	 * Add a filter to query.filtered.filter
