@@ -32,6 +32,11 @@ class ElasticSearchQueryResult implements QueryResultInterface, ProtectedContext
 	 */
 	protected $count = NULL;
 
+	/**
+	 * @var array
+	 */
+	protected $aggregations = [];
+
 	public function __construct(ElasticSearchQuery $elasticSearchQuery) {
 		$this->elasticSearchQuery = $elasticSearchQuery;
 	}
@@ -44,6 +49,7 @@ class ElasticSearchQueryResult implements QueryResultInterface, ProtectedContext
 			$queryBuilder = $this->elasticSearchQuery->getQueryBuilder();
 			$this->results = $queryBuilder->fetch();
 			$this->count = $queryBuilder->getTotalItems();
+			$this->aggregations = $queryBuilder->getAggregations();
 		}
 	}
 
@@ -162,6 +168,15 @@ class ElasticSearchQueryResult implements QueryResultInterface, ProtectedContext
 	public function getAccessibleCount() {
 		$this->initialize();
 		return count($this->results);
+	}
+
+	/**
+	 * @return array the aggregations
+	 * @api
+	 */
+	public function getAggregations() {
+		$this->initialize();
+		return $this->aggregations;
 	}
 
 	/**

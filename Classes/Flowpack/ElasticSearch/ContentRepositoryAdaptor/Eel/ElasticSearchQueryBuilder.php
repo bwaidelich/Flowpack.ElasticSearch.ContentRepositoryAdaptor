@@ -22,6 +22,9 @@ use TYPO3\TYPO3CR\Search\Search\QueryBuilderInterface;
  */
 class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedContextAwareInterface {
 
+	const AGGREGATION_TYPE_TERMS = 'terms';
+
+
 	/**
 	 * @Flow\Inject
 	 * @var \Flowpack\ElasticSearch\ContentRepositoryAdaptor\ElasticSearchClient
@@ -74,6 +77,13 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
 	 * @var integer
 	 */
 	protected $totalItems;
+
+	/**
+	 * The last request's response's aggregations
+	 *
+	 * @var array
+	 */
+	protected $aggregations;
 
 	/**
 	 * This (internal) array stores, for the last search request, a mapping from Node Identifiers
@@ -338,8 +348,43 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
 	}
 
 	/**
+	 * @param string $aggregationName
+	 * @param string $propertyName
+	 * @return $this
+	 */
+	public function aggregateTerms($aggregationName, $propertyName) {
+		return $this->aggregate($aggregationName, self::AGGREGATION_TYPE_TERMS, ['field' => $propertyName]);
+	}
+
+	/**
 	 * LOW-LEVEL API
 	 */
+
+	/**
+	 * @param string $aggregationName
+	 * @param string $aggregationType
+	 * @param array $aggregationBody
+	 * @param string $parentAggregationPath
+	 * @return $this
+	 * @throws QueryBuildingException
+	 */
+	public function aggregate($aggregationName, $aggregationType, array $aggregationBody, $parentAggregationPath = '') {
+		$currentElement =& $this->request['aggregations'];
+		if (!empty($parentAggregationPath)) {
+			foreach (explode('.', $parentAggregationPath) as $pathPart) {
+				if (!isset($currentElement[$pathPart])) {
+					throw new QueryBuildingException('The element at path "' . $parentAggregationPath . '" was not an array (failed at "' . $pathPart . '").', 1383716367);
+				}
+				$currentElement =& $currentElement[$pathPart];
+			}
+		}
+
+		$currentElement[$aggregationName] = [
+			$aggregationType => $aggregationBody
+		];
+		return $this;
+
+	}
 
 	/**
 	 * Adds a filter to query.filtered.query
@@ -470,6 +515,13 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
 	}
 
 	/**
+	 * @return array
+	 */
+	public function getAggregations() {
+		return $this->aggregations;
+	}
+
+	/**
 	 * @return integer
 	 */
 	public function getLimit() {
@@ -509,6 +561,9 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
 		$timeAfterwards = microtime(TRUE);
 
 		$treatedContent = $response->getTreatedContent();
+
+		$this->aggregations = (isset($treatedContent['aggregations']) ? $treatedContent['aggregations'] : []);
+
 		$hits = $treatedContent['hits'];
 
 		if ($this->logThisQuery === TRUE) {
