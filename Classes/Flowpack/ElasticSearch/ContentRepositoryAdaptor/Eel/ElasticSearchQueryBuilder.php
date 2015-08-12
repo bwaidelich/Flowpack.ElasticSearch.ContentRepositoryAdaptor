@@ -184,7 +184,10 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
 
 		// http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/search-request-sort.html
 		$this->request['sort'][] = array(
-			$propertyName => array('order' => 'desc')
+			$propertyName => array(
+				'order' => 'desc',
+				'missing' => PHP_INT_MAX -1
+			)
 		);
 
 		return $this;
@@ -205,7 +208,10 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
 
 		// http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/search-request-sort.html
 		$this->request['sort'][] = array(
-			$propertyName => array('order' => 'asc')
+			$propertyName => array(
+				'order' => 'asc',
+				'missing' => PHP_INT_MAX -1
+			)
 		);
 
 		return $this;
