@@ -15,6 +15,7 @@ use Flowpack\ElasticSearch\ContentRepositoryAdaptor\Exception\QueryBuildingExcep
 use TYPO3\Eel\ProtectedContextAwareInterface;
 use TYPO3\Flow\Annotations as Flow;
 use TYPO3\TYPO3CR\Domain\Model\NodeInterface;
+use TYPO3\TYPO3CR\Domain\Service\ContentDimensionPresetSourceInterface;
 use TYPO3\TYPO3CR\Search\Search\QueryBuilderInterface;
 
 /**
@@ -43,6 +44,12 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
 	 * @var \Flowpack\ElasticSearch\ContentRepositoryAdaptor\LoggerInterface
 	 */
 	protected $logger;
+
+	/**
+	 * @Flow\Inject
+	 * @var ContentDimensionPresetSourceInterface
+	 */
+	protected $dimensionPresetSource;
 
 	/**
 	 * @var boolean
@@ -171,6 +178,29 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
 	}
 
 	/**
+	 * @param string $dimensionName
+	 * @param array $dimensionValues
+	 * @return $this
+	 * @throws QueryBuildingException
+	 * @api
+	 */
+	public function dimension($dimensionName, array $dimensionValues = NULL) {
+		if (is_null($dimensionValues)) {
+			$dimensionValues = $this->contextNode->getContext()->getDimensions()[$dimensionName];
+		}
+		$excludedDimensionValues = array_values(array_diff(array_keys($this->dimensionPresetSource->getAllPresets()[$dimensionName]['presets']), $dimensionValues));
+
+		return $this->queryFilter('terms', [
+			'__dimensionCombinations.' . $dimensionName => $dimensionValues,
+			'execution' => 'and'
+		])
+			->queryFilter('terms', [
+				'__dimensionCombinations.' . $dimensionName => $excludedDimensionValues,
+				'execution' => 'or'
+			], 'must_not');
+	}
+
+	/**
 	 * Sort descending by $propertyName
 	 *
 	 * @param string $propertyName the property name to sort by
@@ -186,7 +216,7 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
 		$this->request['sort'][] = array(
 			$propertyName => array(
 				'order' => 'desc',
-				'missing' => PHP_INT_MAX -1
+				'missing' => PHP_INT_MAX - 1
 			)
 		);
 
@@ -210,7 +240,7 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
 		$this->request['sort'][] = array(
 			$propertyName => array(
 				'order' => 'asc',
-				'missing' => PHP_INT_MAX -1
+				'missing' => PHP_INT_MAX - 1
 			)
 		);
 
@@ -453,7 +483,6 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
 			$currentElement =& $currentElement[$pathPart];
 		}
 		$currentElement[] = $data;
-
 		return $this;
 	}
 
