@@ -647,6 +647,10 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
 	public function count() {
 		$timeBefore = microtime(TRUE);
 		$request = $this->request;
+		if (isset($request['aggregations'])) {
+			/** Aggregations are not supported in count queries */
+			unset($request['aggregations']);
+		}
 		foreach ($this->unsupportedFieldsInCountRequest as $field) {
 			if (isset($request[$field])) {
 				unset($request[$field]);
