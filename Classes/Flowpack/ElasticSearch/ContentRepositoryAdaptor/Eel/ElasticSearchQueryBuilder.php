@@ -473,6 +473,14 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
     }
 
     /**
+     * @return $this
+     */
+    public function resetAccessibilityFilters() {
+        $this->request['query']['filtered']['filter']['bool']['must_not'] = [];
+        return $this;
+    }
+
+    /**
      * LOW-LEVEL API
      */
 
