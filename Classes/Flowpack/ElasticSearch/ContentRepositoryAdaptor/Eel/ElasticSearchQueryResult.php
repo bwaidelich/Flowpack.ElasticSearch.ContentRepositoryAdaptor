@@ -37,6 +37,19 @@ class ElasticSearchQueryResult implements QueryResultInterface, ProtectedContext
 	 */
 	protected $aggregations = [];
 
+    /**
+     * @var array
+     */
+    protected $facets = [];
+
+    /**
+     * @var array
+     */
+    protected $additionalAggregations = [];
+
+    /**
+     * @param ElasticSearchQuery $elasticSearchQuery
+     */
 	public function __construct(ElasticSearchQuery $elasticSearchQuery) {
 		$this->elasticSearchQuery = $elasticSearchQuery;
 	}
@@ -50,6 +63,14 @@ class ElasticSearchQueryResult implements QueryResultInterface, ProtectedContext
 			$this->results = $queryBuilder->fetch();
 			$this->count = $queryBuilder->getTotalItems();
 			$this->aggregations = $queryBuilder->getAggregations();
+            if (isset($this->aggregations['facets'])) {
+                foreach ($this->aggregations['facets'] as $aggregationName => $aggregation) {
+                    if (is_array($aggregation)) {
+                        $this->facets[$aggregationName] = $aggregation[$aggregationName];
+                    }
+                }
+                unset ($this->aggregations['facets']);
+            }
 		}
 	}
 
@@ -170,14 +191,46 @@ class ElasticSearchQueryResult implements QueryResultInterface, ProtectedContext
 		return count($this->results);
 	}
 
-	/**
-	 * @return array the aggregations
-	 * @api
-	 */
-	public function getAggregations() {
-		$this->initialize();
-		return $this->aggregations;
-	}
+    /**
+     * @return array the aggregations
+     * @api
+     */
+    public function getAggregations()
+    {
+        $this->initialize();
+
+        return $this->aggregations;
+    }
+
+    /**
+     * @return array the facets
+     * @api
+     */
+    public function getFacets()
+    {
+        $this->initialize();
+
+        return $this->facets;
+    }
+
+    /**
+     * @param string $key
+     * @param array $aggregations
+     * @return void
+     */
+    public function setAdditionalAggregations($key, array $aggregations)
+    {
+        $this->additionalAggregations[$key] = $aggregations;
+    }
+
+    /**
+     * @param string $key
+     * @return array|null
+     */
+    public function getAdditionalAggregations($key)
+    {
+        return isset($this->additionalAggregations[$key]) ? $this->additionalAggregations[$key] : null;
+    }
 
 	/**
 	 * Returns the ElasticSearch "hit" (e.g. the raw content being transferred back from ElasticSearch)

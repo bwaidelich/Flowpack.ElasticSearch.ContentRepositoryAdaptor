@@ -14,6 +14,7 @@ namespace Flowpack\ElasticSearch\ContentRepositoryAdaptor\Eel;
 use Flowpack\ElasticSearch\ContentRepositoryAdaptor\Exception\QueryBuildingException;
 use TYPO3\Eel\ProtectedContextAwareInterface;
 use TYPO3\Flow\Annotations as Flow;
+use TYPO3\Flow\Utility\Arrays;
 use TYPO3\TYPO3CR\Domain\Model\NodeInterface;
 use TYPO3\TYPO3CR\Domain\Service\ContentDimensionPresetSourceInterface;
 use TYPO3\TYPO3CR\Search\Search\QueryBuilderInterface;
@@ -25,6 +26,10 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
 {
 
     const AGGREGATION_TYPE_TERMS = 'terms';
+    const AGGREGATION_TYPE_MIN = 'min';
+    const AGGREGATION_TYPE_MAX = 'max';
+    const AGGREGATION_TYPE_FILTER = 'filter';
+    const AGGREGATION_TYPE_GLOBAL = 'global';
 
 
     /**
@@ -91,7 +96,19 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
      *
      * @var array
      */
-    protected $aggregations;
+    protected $aggregations = [];
+
+    /**
+     * @var array
+     */
+    protected $facetFilters = [];
+
+    /**
+     * The last request's response's facets
+     *
+     * @var array
+     */
+    protected $facets = [];
 
     /**
      * The last request's response's distances
@@ -173,6 +190,14 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
     /**
      * HIGH-LEVEL API
      */
+
+    /**
+     * @return $this
+     */
+    public function resetAccessibilityFilters() {
+        $this->request['query']['filtered']['filter']['bool']['must_not'] = [];
+        return $this;
+    }
 
     /**
      * Filter by node type, taking inheritance into account.
@@ -464,19 +489,69 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
 
     /**
      * @param string $aggregationName
-     * @param string $propertyName
+     * @param string $attributeCode
+     * @param array $aggregationBody
+     * @param string $parentAggregationPath
      * @return $this
      */
-    public function aggregateTerms($aggregationName, $propertyName)
-    {
-        return $this->aggregate($aggregationName, self::AGGREGATION_TYPE_TERMS, ['field' => $propertyName]);
+    public function aggregateTerms(
+        $aggregationName,
+        $attributeCode,
+        array $aggregationBody = [],
+        $parentAggregationPath = ''
+    ) {
+        return $this->aggregate(
+            $aggregationName,
+            self::AGGREGATION_TYPE_TERMS,
+            Arrays::arrayMergeRecursiveOverrule($aggregationBody, ['field' => $attributeCode]),
+            $parentAggregationPath
+        );
     }
 
     /**
+     * @param string $aggregationName
+     * @param string $aggregationType
+     * @param string $attributeCode
+     * @param array $aggregationBody
+     * @param array $protectedAggregations
+     * @param string $parentAggregationPath
      * @return $this
      */
-    public function resetAccessibilityFilters() {
-        $this->request['query']['filtered']['filter']['bool']['must_not'] = [];
+    public function facet(
+        $aggregationName,
+        $aggregationType,
+        $attributeCode,
+        array $aggregationBody = [],
+        array $protectedAggregations = [],
+        $parentAggregationPath = ''
+    ) {
+        if (!isset($this->request['aggregations']['facets'])) {
+            $this->request['aggregations']['facets'] = [
+                'global' => new \stdClass(),
+                'aggregations' => []
+            ];
+        }
+
+        $this->request['aggregations']['facets']['aggregations'][$aggregationName]['aggregations'][$aggregationName] = [
+            $aggregationType => Arrays::arrayMergeRecursiveOverrule($aggregationBody, ['field' => $attributeCode])
+        ];
+        $this->request['aggregations']['facets']['aggregations'][$aggregationName]['filter']['bool']['must'] = [];
+
+        foreach ($this->facetFilters as $facetFilter) {
+            if (!in_array(key(reset($facetFilter)), $protectedAggregations)) {
+                $aggregationFilters = &$this->request['aggregations']['facets']['aggregations'][$aggregationName]['filter']['bool'];
+                foreach ($facetFilter as $aggregationType => $aggregationBody) {
+                    $aggregationFilters[$aggregationType][] = $aggregationBody;
+                }
+            }
+        }
+
+        foreach ($this->request['query']['filtered']['query']['bool']['must'] as $queryMatch) {
+            $this->request['aggregations']['facets']['aggregations'][$aggregationName]['filter']['bool']['must'][] = [
+                'query' => $queryMatch
+            ];
+        }
+
         return $this;
     }
 
@@ -531,14 +606,21 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
                 1436521987);
         }
 
-        return $this->appendAtPath('query.filtered.query.bool.must', [
+        $match = [
             'match' => [
                 $property => array_merge($options, [
                     'query' => $value,
                     'type' => $matchType
                 ])
             ]
-        ]);
+        ];
+        if (isset($this->request['aggregations']['facets']) && count($this->request['aggregations']['facets']['aggregations']) > 0) {
+            foreach ($this->request['aggregations']['facets']['aggregations'] as $aggregationName => &$facetAggregation) {
+                $facetAggregation['filter']['bool']['must'][]['query'] = $match;
+            }
+        }
+
+        return $this->appendAtPath('query.filtered.query.bool.must', $match);
     }
 
     /**
@@ -556,6 +638,23 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
         if (!in_array($clauseType, array('must', 'should', 'must_not'))) {
             throw new QueryBuildingException('The given clause type "' . $clauseType . '" is not supported. Must be one of "mmust", "should", "must_not".',
                 1383716082);
+        }
+
+        $filterArray = [
+            $clauseType => [
+                $filterType => $filterOptions
+            ]
+        ];
+        $this->facetFilters[] = $filterArray;
+        if (isset($this->request['aggregations']['facets']) && count($this->request['aggregations']['facets']['aggregations']) > 0) {
+
+            foreach ($this->request['aggregations']['facets']['aggregations'] as $aggregationName => &$facetAggregation) {
+                if (!$this->isAggregationProtected($aggregationName, $filterArray[$clauseType])) {
+                    $facetAggregation['filter']['bool'][$clauseType][] = [
+                        $filterType => $filterOptions
+                    ];
+                }
+            }
         }
 
         return $this->appendAtPath('query.filtered.filter.bool.' . $clauseType, array($filterType => $filterOptions));
