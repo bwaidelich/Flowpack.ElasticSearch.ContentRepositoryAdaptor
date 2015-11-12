@@ -412,7 +412,7 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
             $value = $value->getIdentifier();
         }
 
-        return $this->queryFilter('term', array($propertyName => $value));
+        return $this->queryFilter('term', array($propertyName => $value), [$propertyName]);
     }
 
     /**
@@ -425,7 +425,7 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
      */
     public function greaterThan($propertyName, $value)
     {
-        return $this->queryFilter('range', array($propertyName => array('gt' => $value)));
+        return $this->queryFilter('range', array($propertyName => array('gt' => $value)), [$propertyName]);
     }
 
     /**
@@ -438,7 +438,7 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
      */
     public function greaterThanOrEqual($propertyName, $value)
     {
-        return $this->queryFilter('range', array($propertyName => array('gte' => $value)));
+        return $this->queryFilter('range', array($propertyName => array('gte' => $value)), [$propertyName]);
     }
 
     /**
@@ -451,7 +451,7 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
      */
     public function lessThan($propertyName, $value)
     {
-        return $this->queryFilter('range', array($propertyName => array('lt' => $value)));
+        return $this->queryFilter('range', array($propertyName => array('lt' => $value)), [$propertyName]);
     }
 
 
@@ -465,7 +465,7 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
      */
     public function lessThanOrEqual($propertyName, $value)
     {
-        return $this->queryFilter('range', array($propertyName => array('lte' => $value)));
+        return $this->queryFilter('range', array($propertyName => array('lte' => $value)), [$propertyName]);
     }
 
     /**
@@ -629,11 +629,12 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
      * @param string $filterType
      * @param mixed $filterOptions
      * @param string $clauseType one of must, should, must_not
-     * @throws \Flowpack\ElasticSearch\ContentRepositoryAdaptor\Exception\QueryBuildingException
+     * @param array $protectedAggregations
      * @return ElasticSearchQueryBuilder
+     * @throws QueryBuildingException
      * @api
      */
-    public function queryFilter($filterType, $filterOptions, $clauseType = 'must')
+    public function queryFilter($filterType, $filterOptions, $clauseType = 'must', array $protectedAggregations = [])
     {
         if (!in_array($clauseType, array('must', 'should', 'must_not'))) {
             throw new QueryBuildingException('The given clause type "' . $clauseType . '" is not supported. Must be one of "mmust", "should", "must_not".',
@@ -649,7 +650,7 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
         if (isset($this->request['aggregations']['facets']) && count($this->request['aggregations']['facets']['aggregations']) > 0) {
 
             foreach ($this->request['aggregations']['facets']['aggregations'] as $aggregationName => &$facetAggregation) {
-                if (!$this->isAggregationProtected($aggregationName, $filterArray[$clauseType])) {
+                if (!in_array($aggregationName, $protectedAggregations)) {
                     $facetAggregation['filter']['bool'][$clauseType][] = [
                         $filterType => $filterOptions
                     ];
