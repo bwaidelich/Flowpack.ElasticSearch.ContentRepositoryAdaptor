@@ -159,7 +159,7 @@ class ElasticSearchQueryResult implements QueryResultInterface, ProtectedContext
 	public function getFirst() {
 		$this->initialize();
 		if (count($this->results) > 0) {
-			return array_slice($this->results, 0, 1);
+			return array_values($this->results)[0];
 		}
 	}
 
