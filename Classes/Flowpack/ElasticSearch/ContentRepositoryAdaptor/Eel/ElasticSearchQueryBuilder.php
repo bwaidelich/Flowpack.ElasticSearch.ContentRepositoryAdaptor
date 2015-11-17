@@ -416,6 +416,22 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
     }
 
     /**
+     * @param string $field
+     * @param mixed  $value
+     * @return $this
+     */
+    public function notExactMatch($field, $value) {
+        $this->request['query']['filtered']['filter']['bool']['must_not'][] = [
+            'term' => [
+                $field => $value
+            ]
+
+        ];
+
+        return $this;
+    }
+
+    /**
      * add a range filter (gt) for the given property
      *
      * @param string $propertyName Name of the property
