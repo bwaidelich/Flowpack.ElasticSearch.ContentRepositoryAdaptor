@@ -194,8 +194,10 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
     /**
      * @return $this
      */
-    public function resetAccessibilityFilters() {
+    public function resetAccessibilityFilters()
+    {
         $this->request['query']['filtered']['filter']['bool']['must_not'] = [];
+
         return $this;
     }
 
@@ -417,10 +419,11 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
 
     /**
      * @param string $field
-     * @param mixed  $value
+     * @param mixed $value
      * @return $this
      */
-    public function notExactMatch($field, $value) {
+    public function notExactMatch($field, $value)
+    {
         $this->request['query']['filtered']['filter']['bool']['must_not'][] = [
             'term' => [
                 $field => $value
@@ -500,6 +503,22 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
             return $this;
         } else {
             return $this->queryMatch($property, $value, 'phrase', empty($analyzer) ? [] : ['analyzer' => $analyzer]);
+        }
+    }
+
+    /**
+     * @param string $property
+     * @param mixed $value
+     * @param boolean $skipEmptyValue
+     * @return $this
+     */
+    public function wildcard($property, $value, $skipEmptyValue = false)
+    {
+        if (empty($value) && $skipEmptyValue) {
+            return $this;
+        } else {
+            $this->request['query']['filtered']['query']['bool']['must'][] = ['wildcard' => [$property => $value]];
+            return $this;
         }
     }
 
