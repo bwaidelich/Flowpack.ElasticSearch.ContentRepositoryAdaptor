@@ -517,7 +517,7 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
         if (empty($value) && $skipEmptyValue) {
             return $this;
         } else {
-            $this->request['query']['filtered']['query']['bool']['must'][] = ['wildcard' => [$property => $value]];
+            $this->request['query']['filtered']['query']['bool']['must'][] = ['wildcard' => [$property => strtolower($value)]];
             return $this;
         }
     }
