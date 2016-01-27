@@ -25,12 +25,7 @@ class ElasticSearchQueryResult implements QueryResultInterface, ProtectedContext
     /**
      * @var array
      */
-    protected $results = null;
-
-    /**
-     * @var integer
-     */
-    protected $count = null;
+    protected $result = null;
 
     /**
      * @var array
@@ -50,6 +45,13 @@ class ElasticSearchQueryResult implements QueryResultInterface, ProtectedContext
     /**
      * @param ElasticSearchQuery $elasticSearchQuery
      */
+    protected $nodes = null;
+
+    /**
+     * @var integer
+     */
+    protected $count = null;
+
     public function __construct(ElasticSearchQuery $elasticSearchQuery)
     {
         $this->elasticSearchQuery = $elasticSearchQuery;
@@ -60,9 +62,10 @@ class ElasticSearchQueryResult implements QueryResultInterface, ProtectedContext
      */
     protected function initialize()
     {
-        if ($this->results === null) {
+        if ($this->result === null) {
             $queryBuilder = $this->elasticSearchQuery->getQueryBuilder();
-            $this->results = $queryBuilder->fetch();
+            $this->result = $queryBuilder->fetch();
+            $this->nodes = $this->result['nodes'];
             $this->count = $queryBuilder->getTotalItems();
             $this->aggregations = $queryBuilder->getAggregations();
             if (isset($this->aggregations['facets'])) {
@@ -90,7 +93,8 @@ class ElasticSearchQueryResult implements QueryResultInterface, ProtectedContext
     public function current()
     {
         $this->initialize();
-        return current($this->results);
+
+        return current($this->nodes);
     }
 
     /**
@@ -99,7 +103,8 @@ class ElasticSearchQueryResult implements QueryResultInterface, ProtectedContext
     public function next()
     {
         $this->initialize();
-        return next($this->results);
+
+        return next($this->nodes);
     }
 
     /**
@@ -108,7 +113,8 @@ class ElasticSearchQueryResult implements QueryResultInterface, ProtectedContext
     public function key()
     {
         $this->initialize();
-        return key($this->results);
+
+        return key($this->nodes);
     }
 
     /**
@@ -117,7 +123,8 @@ class ElasticSearchQueryResult implements QueryResultInterface, ProtectedContext
     public function valid()
     {
         $this->initialize();
-        return current($this->results) !== false;
+
+        return current($this->nodes) !== false;
     }
 
     /**
@@ -126,7 +133,7 @@ class ElasticSearchQueryResult implements QueryResultInterface, ProtectedContext
     public function rewind()
     {
         $this->initialize();
-        reset($this->results);
+        reset($this->nodes);
     }
 
     /**
@@ -135,7 +142,8 @@ class ElasticSearchQueryResult implements QueryResultInterface, ProtectedContext
     public function offsetExists($offset)
     {
         $this->initialize();
-        return isset($this->results[$offset]);
+
+        return isset($this->nodes[$offset]);
     }
 
     /**
@@ -144,7 +152,8 @@ class ElasticSearchQueryResult implements QueryResultInterface, ProtectedContext
     public function offsetGet($offset)
     {
         $this->initialize();
-        return $this->results[$offset];
+
+        return $this->nodes[$offset];
     }
 
     /**
@@ -153,7 +162,7 @@ class ElasticSearchQueryResult implements QueryResultInterface, ProtectedContext
     public function offsetSet($offset, $value)
     {
         $this->initialize();
-        $this->results[$offset] = $value;
+        $this->nodes[$offset] = $value;
     }
 
     /**
@@ -162,7 +171,7 @@ class ElasticSearchQueryResult implements QueryResultInterface, ProtectedContext
     public function offsetUnset($offset)
     {
         $this->initialize();
-        unset($this->results[$offset]);
+        unset($this->nodes[$offset]);
     }
 
     /**
@@ -171,9 +180,11 @@ class ElasticSearchQueryResult implements QueryResultInterface, ProtectedContext
     public function getFirst()
     {
         $this->initialize();
-        if (count($this->results) > 0) {
-            return array_values($this->results)[0];
+        if (count($this->nodes) > 0) {
+            return array_values($this->nodes)[0];
         }
+
+        return null;
     }
 
     /**
@@ -182,7 +193,8 @@ class ElasticSearchQueryResult implements QueryResultInterface, ProtectedContext
     public function toArray()
     {
         $this->initialize();
-        return $this->results;
+
+        return $this->nodes;
     }
 
     /**
@@ -204,7 +216,8 @@ class ElasticSearchQueryResult implements QueryResultInterface, ProtectedContext
     public function getAccessibleCount()
     {
         $this->initialize();
-        return count($this->results);
+
+        return count($this->nodes);
     }
 
     /**
@@ -249,6 +262,23 @@ class ElasticSearchQueryResult implements QueryResultInterface, ProtectedContext
     }
 
     /**
+     * @return array
+     */
+    public function getSuggestions()
+    {
+        $this->initialize();
+        if (count($this->result['suggest']) === 1) {
+            $suggestArray = current($this->result['suggest']);
+
+            if (count($suggestArray) === 1) {
+                return current($suggestArray);
+            }
+        }
+
+        return $this->result['suggest'];
+    }
+
+    /**
      * Returns the ElasticSearch "hit" (e.g. the raw content being transferred back from ElasticSearch)
      * for the given node.
      *
@@ -261,6 +291,23 @@ class ElasticSearchQueryResult implements QueryResultInterface, ProtectedContext
     public function searchHitForNode(NodeInterface $node)
     {
         return $this->elasticSearchQuery->getQueryBuilder()->getFullElasticSearchHitForNode($node);
+    }
+
+    /**
+     * Returns the array with all sort values for a given node. The values are fetched from the raw content
+     * ElasticSearch returns within the hit data
+     *
+     * @param NodeInterface $node
+     * @return array
+     */
+    public function getSortValuesForNode(NodeInterface $node)
+    {
+        $hit = $this->searchHitForNode($node);
+        if (is_array($hit) && array_key_exists('sort', $hit)) {
+            return $hit['sort'];
+        }
+
+        return array();
     }
 
     /**

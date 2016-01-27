@@ -81,7 +81,7 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
      *
      * @var array
      */
-    protected $unsupportedFieldsInCountRequest = array('fields', 'sort', 'from', 'size', 'highlight');
+    protected $unsupportedFieldsInCountRequest = array('fields', 'sort', 'from', 'size', 'highlight', 'aggs', 'aggregations');
 
     /**
      * Amount of total items in response without limit
@@ -201,6 +201,11 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
     }
 
     /**
+     * @var array
+     */
+    protected $result = array();
+
+    /**
      * Filter by node type, taking inheritance into account.
      *
      * @param string $nodeType the node type to filter for
@@ -250,21 +255,17 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
      */
     public function sortDesc($propertyName)
     {
-        if (!isset($this->request['sort'])) {
-            $this->request['sort'] = array();
-        }
-
-        // http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/search-request-sort.html
-        $this->request['sort'][] = array(
-            $propertyName => array(
+        $configuration = [
+            $propertyName => [
                 'order' => 'desc',
                 'missing' => PHP_INT_MAX - 1
-            )
-        );
+            ]
+        ];
+
+        $this->sort($configuration);
 
         return $this;
     }
-
 
     /**
      * Sort ascending by $propertyName
@@ -275,17 +276,15 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
      */
     public function sortAsc($propertyName)
     {
-        if (!isset($this->request['sort'])) {
-            $this->request['sort'] = array();
-        }
 
-        // http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/search-request-sort.html
-        $this->request['sort'][] = array(
-            $propertyName => array(
+        $configuration = [
+            $propertyName => [
                 'order' => 'asc',
                 'missing' => PHP_INT_MAX - 1
-            )
-        );
+            ]
+        ];
+
+        $this->sort($configuration);
 
         return $this;
     }
@@ -300,10 +299,7 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
      */
     public function sortGeoDistanceAsc($property, $referenceLatitude, $referenceLongitude, $unit = 'km')
     {
-        if (!isset($this->request['sort'])) {
-            $this->request['sort'] = [];
-        }
-        $this->request['sort'][] = [
+        $configuration =  [
             '_geo_distance' => [
                 $property => [
                     'lat' => (double)$referenceLatitude,
@@ -313,6 +309,8 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
                 'unit' => $unit
             ]
         ];
+
+        $this->sort($configuration);
 
         return $this;
     }
@@ -327,10 +325,7 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
      */
     public function sortGeoDistanceDesc($property, $referenceLatitude, $referenceLongitude, $unit = 'km')
     {
-        if (!isset($this->request['sort'])) {
-            $this->request['sort'] = [];
-        }
-        $this->request['sort'][] = [
+        $configuration = [
             '_geo_distance' => [
                 $property => [
                     $referenceLongitude,
@@ -341,9 +336,29 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
             ]
         ];
 
+        $this->sort($configuration);
+
         return $this;
     }
 
+    /**
+     * Add a $configuration sort filter to the request
+     *
+     * @param array $configuration
+     * @return ElasticSearchQueryBuilder
+     * @see http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/search-request-sort.html
+     * @api
+     */
+    public function sort($configuration)
+    {
+        if (!isset($this->request['sort'])) {
+            $this->request['sort'] = array();
+        }
+
+        $this->request['sort'][] = $configuration;
+
+        return $this;
+    }
 
     /**
      * output only $limit records
@@ -729,8 +744,7 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
         $currentElement =& $this->request;
         foreach (explode('.', $path) as $pathPart) {
             if (!isset($currentElement[$pathPart])) {
-                throw new QueryBuildingException('The element at path "' . $path . '" was not an array (failed at "' . $pathPart . '").',
-                    1383716367);
+                throw new QueryBuildingException('The element at path "' . $path . '" was not an array (failed at "' . $pathPart . '").', 1383716367);
             }
             $currentElement =& $currentElement[$pathPart];
         }
@@ -742,7 +756,7 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
     /**
      * Add multiple filters to query.filtered.filter
      *
-     * Example Usage::
+     * Example Usage:
      *
      *   searchFilter = TYPO3.TypoScript:RawArray {
      *      author = 'Max'
@@ -770,6 +784,154 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
                 }
             }
         }
+        return $this;
+    }
+
+    /**
+     * This method adds a field based aggregation configuration. This can be used for simple
+     * aggregations like terms
+     *
+     * Example Usage to create a terms aggregation for a property color:
+     * nodes = ${Search....fieldBasedAggregation("colors", "color").execute()}
+     *
+     * Access all aggregation data with {nodes.aggregations} in your fluid template
+     *
+     * @param $name
+     * @param $field
+     * @param string $type
+     * @param null $parentPath
+     * @return $this
+     */
+    public function fieldBasedAggregation($name, $field, $type = "terms", $parentPath = null)
+    {
+        $aggregationDefinition = array(
+            $type => array(
+                'field' => $field
+            )
+        );
+
+        $this->aggregation($name, $aggregationDefinition, $parentPath);
+        return $this;
+    }
+
+    /**
+     * This method is used to create any kind of aggregation.
+     *
+     * Example Usage to create a terms aggregation for a property color:
+     *
+     * aggregationDefinition = TYPO3.TypoScript:RawArray {
+     *   terms = TYPO3.TypoScript:RawArray {
+     *     field = "color"
+     *   }
+     * }
+     *
+     * nodes = ${Search....aggregation("color", this.aggregationDefinition).execute()}
+     *
+     * Access all aggregation data with {nodes.aggregations} in your fluid template
+     *
+     * @param string $name
+     * @param array $aggregationDefinition
+     * @param null $parentPath
+     * @return $this
+     * @throws QueryBuildingException
+     */
+    public function aggregation($name, array $aggregationDefinition, $parentPath = null)
+    {
+        if (!array_key_exists("aggregations", $this->request)) {
+            $this->request['aggregations'] = array();
+        }
+
+        if ($parentPath !== null) {
+            $this->addSubAggregation($parentPath, $name, $aggregationDefinition);
+        } else {
+            $this->request['aggregations'][$name] = $aggregationDefinition;
+        }
+
+        return $this;
+    }
+
+    /**
+     * This is an low level method for internal usage.
+     * You can add a custom $aggregationConfiguration under a given $parentPath. The $parentPath foo.bar would
+     * insert your $aggregationConfiguration under
+     * $this->request['aggregations']['foo']['aggregations']['bar']['aggregations'][$name]
+     *
+     * @param $parentPath
+     * @param $name
+     * @param array $aggregationConfiguration
+     * @return $this
+     * @throws QueryBuildingException
+     */
+    protected function addSubAggregation($parentPath, $name, $aggregationConfiguration)
+    {
+        // Find the parentPath
+        $path =& $this->request['aggregations'];
+
+        foreach (explode(".", $parentPath) as $subPart) {
+            if ($path == null || !array_key_exists($subPart, $path)) {
+                throw new QueryBuildingException("The parent path ".$subPart." could not be found when adding a sub aggregation");
+            }
+            $path =& $path[$subPart]['aggregations'];
+        }
+
+        $path[$name] = $aggregationConfiguration;
+        return $this;
+    }
+
+    /**
+     * This method is used to create a simple term suggestion.
+     *
+     * Example Usage of a term suggestion
+     *
+     * nodes = ${Search....termSuggestions("aTerm")}
+     *
+     * Access all suggestions data with {nodes.suggestions} in your fluid template
+     *
+     * @param string $text
+     * @param string $field
+     * @param string $name
+     * @return $this
+     */
+    public function termSuggestions($text, $field = '_all', $name = 'suggestions')
+    {
+        $suggestionDefinition = [
+            'text' => $text,
+            'term' => [
+                'field' => $field
+            ]
+        ];
+
+        $this->suggestions($name, $suggestionDefinition);
+        return $this;
+    }
+
+    /**
+     * This method is used to create any kind of suggestion.
+     *
+     * Example Usage of a term suggestion for the fulltext search
+     *
+     * suggestionDefinition = TYPO3.TypoScript:RawArray {
+     *     text = "some text"
+     *     terms = TYPO3.TypoScript:RawArray {
+     *         field = "body"
+     *     }
+     * }
+     *
+     * nodes = ${Search....suggestion("my-suggestions", this.suggestionDefinition).execute()}
+     *
+     * Access all suggestions data with {nodes.suggestions} in your fluid template
+     *
+     * @param string $name
+     * @param array $suggestionDefinition
+     * @return $this
+     */
+    public function suggestions($name, array $suggestionDefinition)
+    {
+        if (!array_key_exists('suggest', $this->request)) {
+            $this->request['suggest'] = [];
+        }
+
+        $this->request['suggest'][$name] = $suggestionDefinition;
 
         return $this;
     }
@@ -804,7 +966,10 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
      */
     public function getTotalItems()
     {
-        return $this->totalItems;
+        if (array_key_exists('total', $this->result)) {
+            return (int) $this->result['total'];
+        }
+        return 0;
     }
 
     /**
@@ -851,7 +1016,6 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
         if (isset($this->elasticSearchHitsIndexedByNodeFromLastRequest[$node->getIdentifier()])) {
             return $this->elasticSearchHitsIndexedByNodeFromLastRequest[$node->getIdentifier()];
         }
-
         return null;
     }
 
@@ -865,86 +1029,25 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
     public function fetch()
     {
         $timeBefore = microtime(true);
-        $response = $this->elasticSearchClient->getIndex()->request('GET', '/_search', array(),
-            json_encode($this->request));
+
+        $response = $this->elasticSearchClient->getIndex()->request('GET', '/_search', array(), json_encode($this->request));
         $timeAfterwards = microtime(true);
 
-        $treatedContent = $response->getTreatedContent();
-
-        $this->aggregations = (isset($treatedContent['aggregations']) ? $treatedContent['aggregations'] : []);
+        $this->result = $response->getTreatedContent();
+        $this->aggregations = (isset($this->result['aggregations']) ? $this->result['aggregations'] : []);
         $this->distances = [];
 
-        $hits = $treatedContent['hits'];
 
+        $this->result['nodes'] = array();
         if ($this->logThisQuery === true) {
-            $this->logger->log('Query Log (' . $this->logMessage . '): ' . json_encode($this->request) . ' -- execution time: ' . (($timeAfterwards - $timeBefore) * 1000) . ' ms -- Limit: ' . $this->limit . ' -- Number of results returned: ' . count($hits['hits']) . ' -- Total Results: ' . $hits['total'],
-                LOG_DEBUG);
+            $this->logger->log(sprintf('Query Log (%s): %s -- execution time: %s ms -- Limit: %s -- Number of results returned: %s -- Total Results: %s',
+                $this->logMessage, json_encode($this->request), (($timeAfterwards - $timeBefore) * 1000), $this->limit, count($this->result['hits']['hits']), $this->result['hits']['total']), LOG_DEBUG);
+        }
+        if (array_key_exists('hits', $this->result) && is_array($this->result['hits']) && count($this->result['hits']) > 0) {
+            $this->result['nodes'] = $this->convertHitsToNodes($this->result['hits']);
         }
 
-        $this->totalItems = $hits['total'];
-
-        if ($hits['total'] === 0) {
-            return array();
-        }
-
-        $nodes = array();
-        $elasticSearchHitPerNode = array();
-        $distanceKey = null;
-        if (isset($this->request['sort'])) {
-            foreach ($this->request['sort'] as $key => $sortEntry) {
-                foreach ($sortEntry as $sortType => $sortOptions) {
-                    if ($sortType === '_geo_distance') {
-                        $distanceKey = $key;
-                        break 2;
-                    }
-                }
-            }
-        }
-
-        /**
-         * TODO: This code below is not fully correct yet:
-         *
-         * We always fetch $limit * (numerOfWorkspaces) records; so that we find a node:
-         * - *once* if it is only in live workspace and matches the query
-         * - *once* if it is only in user workspace and matches the query
-         * - *twice* if it is in both workspaces and matches the query *both times*. In this case we filter the duplicate record.
-         * - *once* if it is in the live workspace and has been DELETED in the user workspace (STILL WRONG)
-         * - *once* if it is in the live workspace and has been MODIFIED to NOT MATCH THE QUERY ANYMORE in user workspace (STILL WRONG)
-         *
-         * If we want to fix this cleanly, we'd need to do an *additional query* in order to filter all nodes from a non-user workspace
-         * which *do exist in the user workspace but do NOT match the current query*. This has to be done somehow "recursively"; and later
-         * we might be able to use https://github.com/elasticsearch/elasticsearch/issues/3300 as soon as it is merged.
-         */
-        foreach ($hits['hits'] as $hit) {
-            // with ElasticSearch 1.0 fields always returns an array,
-            // see https://github.com/Flowpack/Flowpack.ElasticSearch.ContentRepositoryAdaptor/issues/17
-            if (is_array($hit['fields']['__path'])) {
-                $nodePath = current($hit['fields']['__path']);
-            } else {
-                $nodePath = $hit['fields']['__path'];
-            }
-            $node = $this->contextNode->getNode($nodePath);
-            if ($node instanceof NodeInterface) {
-                $nodes[$node->getIdentifier()] = $node;
-                $elasticSearchHitPerNode[$node->getIdentifier()] = $hit;
-
-                if (!is_null($distanceKey) && isset($hit['sort'][$distanceKey])) {
-                    $this->distances[$node->getIdentifier()] = $hit['sort'][$distanceKey];
-                }
-                if ($this->limit > 0 && count($nodes) >= $this->limit) {
-                    break;
-                }
-            }
-        }
-
-        if ($this->logThisQuery === true) {
-            $this->logger->log('Query Log (' . $this->logMessage . ') Number of returned results: ' . count($nodes),
-                LOG_DEBUG);
-        }
-
-        $this->elasticSearchHitsIndexedByNodeFromLastRequest = $elasticSearchHitPerNode;
-
-        return array_values($nodes);
+        return $this->result;
     }
 
     /**
@@ -956,10 +1059,11 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
     public function execute()
     {
         $elasticSearchQuery = new ElasticSearchQuery($this);
-        $result = $elasticSearchQuery->execute();
 
+        $result = $elasticSearchQuery->execute(true);
         return $result;
     }
+
 
     /**
      * Return the total number of hits for the query.
@@ -971,10 +1075,12 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
     {
         $timeBefore = microtime(true);
         $request = $this->request;
+
         if (isset($request['aggregations'])) {
             /** Aggregations are not supported in count queries */
             unset($request['aggregations']);
         }
+
         foreach ($this->unsupportedFieldsInCountRequest as $field) {
             if (isset($request[$field])) {
                 unset($request[$field]);
@@ -988,8 +1094,7 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
         $count = $treatedContent['count'];
 
         if ($this->logThisQuery === true) {
-            $this->logger->log('Query Log (' . $this->logMessage . '): ' . json_encode($this->request) . ' -- execution time: ' . (($timeAfterwards - $timeBefore) * 1000) . ' ms -- Total Results: ' . $count,
-                LOG_DEBUG);
+            $this->logger->log('Count Query Log (' . $this->logMessage . '): ' . json_encode($this->request) . ' -- execution time: ' . (($timeAfterwards - $timeBefore) * 1000) . ' ms -- Total Results: ' . $count, LOG_DEBUG);
         }
 
         return $count;
@@ -1060,8 +1165,14 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
 
         //
         // http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/query-dsl-terms-filter.html
-        $this->queryFilter('terms',
-            array('__workspace' => array_unique(array('live', $contextNode->getContext()->getWorkspace()->getName()))));
+
+        $this->queryFilter('terms', array('__workspace' => array_unique(array('live', $contextNode->getContext()->getWorkspace()->getName()))));
+
+        // match exact dimension values for each dimension, this works because the indexing flattens the node variants for all dimension preset combinations
+        $dimensionCombinations = $contextNode->getContext()->getDimensions();
+        if (is_array($dimensionCombinations)) {
+            $this->queryFilter('term', ['__dimensionCombinationHash' => md5(json_encode($dimensionCombinations))]);
+        }
 
         $this->contextNode = $contextNode;
 
@@ -1078,4 +1189,49 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
     {
         return true;
     }
+
+    /**
+     * @param array $hits
+     * @return array Array of Node objects
+     */
+    protected function convertHitsToNodes(array $hits)
+    {
+        $nodes = array();
+        $elasticSearchHitPerNode = array();
+
+        /**
+         * TODO: This code below is not fully correct yet:
+         *
+         * We always fetch $limit * (numerOfWorkspaces) records; so that we find a node:
+         * - *once* if it is only in live workspace and matches the query
+         * - *once* if it is only in user workspace and matches the query
+         * - *twice* if it is in both workspaces and matches the query *both times*. In this case we filter the duplicate record.
+         * - *once* if it is in the live workspace and has been DELETED in the user workspace (STILL WRONG)
+         * - *once* if it is in the live workspace and has been MODIFIED to NOT MATCH THE QUERY ANYMORE in user workspace (STILL WRONG)
+         *
+         * If we want to fix this cleanly, we'd need to do an *additional query* in order to filter all nodes from a non-user workspace
+         * which *do exist in the user workspace but do NOT match the current query*. This has to be done somehow "recursively"; and later
+         * we might be able to use https://github.com/elasticsearch/elasticsearch/issues/3300 as soon as it is merged.
+         */
+        foreach ($hits['hits'] as $hit) {
+            $nodePath = current($hit['fields']['__path']);
+            $node = $this->contextNode->getNode($nodePath);
+            if ($node instanceof NodeInterface && !isset($nodes[$node->getIdentifier()])) {
+                $nodes[$node->getIdentifier()] = $node;
+                $elasticSearchHitPerNode[$node->getIdentifier()] = $hit;
+                if ($this->limit > 0 && count($nodes) >= $this->limit) {
+                    break;
+                }
+            }
+        }
+
+        if ($this->logThisQuery === true) {
+            $this->logger->log('Returned nodes (' . $this->logMessage . '): ' . count($nodes), LOG_DEBUG);
+        }
+
+        $this->elasticSearchHitsIndexedByNodeFromLastRequest = $elasticSearchHitPerNode;
+
+        return array_values($nodes);
+    }
+
 }
