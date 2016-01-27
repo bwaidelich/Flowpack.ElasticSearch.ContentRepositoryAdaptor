@@ -24,7 +24,6 @@ use TYPO3\TYPO3CR\Search\Search\QueryBuilderInterface;
  */
 class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedContextAwareInterface
 {
-
     const AGGREGATION_TYPE_TERMS = 'terms';
     const AGGREGATION_TYPE_MIN = 'min';
     const AGGREGATION_TYPE_MAX = 'max';
@@ -620,7 +619,6 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
         ];
 
         return $this;
-
     }
 
     /**
@@ -683,7 +681,6 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
         ];
         $this->facetFilters[] = $filterArray;
         if (isset($this->request['aggregations']['facets']) && count($this->request['aggregations']['facets']['aggregations']) > 0) {
-
             foreach ($this->request['aggregations']['facets']['aggregations'] as $aggregationName => &$facetAggregation) {
                 if (!in_array($aggregationName, $protectedAggregations)) {
                     $facetAggregation['filter']['bool'][$clauseType][] = [
