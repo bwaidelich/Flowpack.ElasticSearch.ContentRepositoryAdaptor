@@ -155,7 +155,14 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
                 'filter' => array(
                     // http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/query-dsl-bool-filter.html
                     'bool' => array(
-                        'must' => array(),
+                        'must' => array(
+                            // @todo adjust to current roles
+                            array(
+                                'missing' => [
+                                    'field' => '_accessroles'
+                                ]
+                            )
+                        ),
                         'should' => array(),
                         'must_not' => array(
                             // Filter out all hidden elements
