@@ -1044,7 +1044,6 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
         $this->aggregations = (isset($this->result['aggregations']) ? $this->result['aggregations'] : []);
         $this->distances = [];
 
-
         $this->result['nodes'] = array();
         if ($this->logThisQuery === true) {
             $this->logger->log(sprintf('Query Log (%s): %s -- execution time: %s ms -- Limit: %s -- Number of results returned: %s -- Total Results: %s',
@@ -1226,6 +1225,9 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
             if ($node instanceof NodeInterface && !isset($nodes[$node->getIdentifier()])) {
                 $nodes[$node->getIdentifier()] = $node;
                 $elasticSearchHitPerNode[$node->getIdentifier()] = $hit;
+                if (isset($hit['sort']) && is_array($hit['sort'])) {
+                    $this->distances[$node->getIdentifier()] = current($hit['sort']);
+                }
                 if ($this->limit > 0 && count($nodes) >= $this->limit) {
                     break;
                 }
