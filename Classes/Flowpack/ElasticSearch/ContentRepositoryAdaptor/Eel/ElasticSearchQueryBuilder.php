@@ -203,6 +203,14 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
     public function resetAccessibilityFilters()
     {
         $this->request['query']['filtered']['filter']['bool']['must_not'] = [];
+        $musts = [];
+        foreach ($this->request['query']['filtered']['filter']['bool']['must'] as $index => $must) {
+            if (!(isset($must['missing']) && $must['missing']['field'] === '_accessroles') &&
+                !(isset($must['term']) && isset($must['term']['__dimensionCombinationHash']))) {
+                $musts[] = $must;
+            }
+        }
+        $this->request['query']['filtered']['filter']['bool']['must'] = $musts;
 
         return $this;
     }
