@@ -981,8 +981,8 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
      */
     public function getTotalItems()
     {
-        if (array_key_exists('total', $this->result)) {
-            return (int) $this->result['total'];
+        if (array_key_exists('total', $this->result['hits'])) {
+            return (int) $this->result['hits']['total'];
         }
         return 0;
     }
