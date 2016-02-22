@@ -473,7 +473,7 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
      */
     public function greaterThan($propertyName, $value)
     {
-        return $this->queryFilter('range', array($propertyName => array('gt' => $value)), [$propertyName]);
+        return $this->queryFilter('range', array($propertyName => array('gt' => $value)), 'must', [$propertyName]);
     }
 
     /**
@@ -486,7 +486,7 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
      */
     public function greaterThanOrEqual($propertyName, $value)
     {
-        return $this->queryFilter('range', array($propertyName => array('gte' => $value)), [$propertyName]);
+        return $this->queryFilter('range', array($propertyName => array('gte' => $value)), 'must', [$propertyName]);
     }
 
     /**
@@ -499,7 +499,7 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
      */
     public function lessThan($propertyName, $value)
     {
-        return $this->queryFilter('range', array($propertyName => array('lt' => $value)), [$propertyName]);
+        return $this->queryFilter('range', array($propertyName => array('lt' => $value)), 'must', [$propertyName]);
     }
 
 
@@ -513,7 +513,7 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
      */
     public function lessThanOrEqual($propertyName, $value)
     {
-        return $this->queryFilter('range', array($propertyName => array('lte' => $value)), [$propertyName]);
+        return $this->queryFilter('range', array($propertyName => array('lte' => $value)), 'must', [$propertyName]);
     }
 
     /**
