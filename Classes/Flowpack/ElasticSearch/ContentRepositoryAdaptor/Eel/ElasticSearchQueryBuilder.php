@@ -575,7 +575,7 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
     /**
      * @param string $aggregationName
      * @param string $aggregationType
-     * @param string $attributeCode
+     * @param string $propertyName
      * @param array $aggregationBody
      * @param array $protectedAggregations
      * @param string $parentAggregationPath
@@ -584,7 +584,7 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
     public function facet(
         $aggregationName,
         $aggregationType,
-        $attributeCode,
+        $propertyName,
         array $aggregationBody = [],
         array $protectedAggregations = [],
         $parentAggregationPath = ''
@@ -597,12 +597,12 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
         }
 
         $this->request['aggregations']['facets']['aggregations'][$aggregationName]['aggregations'][$aggregationName] = [
-            $aggregationType => Arrays::arrayMergeRecursiveOverrule($aggregationBody, ['field' => $attributeCode])
+            $aggregationType => Arrays::arrayMergeRecursiveOverrule($aggregationBody, ['field' => $propertyName])
         ];
         $this->request['aggregations']['facets']['aggregations'][$aggregationName]['filter']['bool']['must'] = [];
 
         foreach ($this->facetFilters as $facetFilter) {
-            if (!in_array(key(reset($facetFilter)), $protectedAggregations)) {
+            if (!$this->isFacetProtected($facetFilter, $protectedAggregations)) {
                 $aggregationFilters = &$this->request['aggregations']['facets']['aggregations'][$aggregationName]['filter']['bool'];
                 foreach ($facetFilter as $aggregationType => $aggregationBody) {
                     $aggregationFilters[$aggregationType][] = $aggregationBody;
@@ -617,6 +617,27 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
         }
 
         return $this;
+    }
+
+    /**
+     * @param array $facetFilter
+     * @param array $protectedAggregations
+     * @return boolean
+     */
+    protected function isFacetProtected(array $facetFilter, array $protectedAggregations) {
+        if (isset($facetFilter['must'])) {
+            if (isset($facetFilter['term'])) {
+                $aggregationName = key(reset($facetFilter['term']));
+            } elseif(isset($facetFilter['terms'])) {
+                $aggregationName = key(reset($facetFilter['terms']));
+            }
+        }
+
+
+        if (isset($aggregationName)) {
+            return in_array($aggregationName, $protectedAggregations);
+        }
+        return false;
     }
 
     /**
@@ -785,17 +806,23 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
      *
      * @param array $data An associative array of keys as variable names and values as variable values
      * @param string $clauseType one of must, should, must_not
+     * @param array $protectedAggregations
      * @return ElasticSearchQueryBuilder
+     * @throws QueryBuildingException
      * @api
      */
-    public function queryFilterMultiple($data, $clauseType = 'must')
+    public function queryFilterMultiple($data, $clauseType = 'must', array $protectedAggregations = [])
     {
         foreach ($data as $key => $value) {
             if ($value !== null) {
+                $protectedFilterAggregations = [];
+                if (in_array($key, $protectedAggregations)) {
+                    $protectedFilterAggregations = [$key];
+                }
                 if (is_array($value)) {
-                    $this->queryFilter('terms', array($key => $value), $clauseType);
+                    $this->queryFilter('terms', array($key => $value), $clauseType, $protectedFilterAggregations);
                 } else {
-                    $this->queryFilter('term', array($key => $value), $clauseType);
+                    $this->queryFilter('term', array($key => $value), $clauseType, $protectedFilterAggregations);
                 }
             }
         }
