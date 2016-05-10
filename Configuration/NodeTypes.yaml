@@ -52,6 +52,7 @@
         indexing: ''
 
     '_accessroles':
+      type: array
       search:
         elasticSearchMapping:
           type: string
