@@ -1155,6 +1155,15 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
             ]
         ]);
 
+        // add the query_string filter to all facets
+        if (isset($this->request['aggregations']['facets']['aggregations'])) {
+            foreach ($this->request['aggregations']['facets']['aggregations'] as $aggregationName => &$facetAggregation) {
+                $facetAggregation['filter']['bool']['must'][]['query_string'] = [
+                    'query' => $searchWord
+                ];
+            }
+        }
+
         // We automatically enable result highlighting when doing fulltext searches. It is up to the user to use this information or not use it.
         return $this->highlight(150, 2);
     }
