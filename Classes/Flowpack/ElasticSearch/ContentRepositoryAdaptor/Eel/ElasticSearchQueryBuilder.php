@@ -149,7 +149,9 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
                             [
                                 'match_all' => []
                             ]
-                        ]
+                        ],
+                        'should' => [],
+                        'must_not' => []
                     ]
 
                 ],
@@ -1010,8 +1012,8 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
      */
     public function getTotalItems()
     {
-        if (array_key_exists('total', $this->result)) {
-            return (int)$this->result['total'];
+        if (isset($this->result['hits']['total'])) {
+            return (int)$this->result['hits']['total'];
         }
         return 0;
     }
@@ -1118,9 +1120,9 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
     public function count()
     {
         $timeBefore = microtime(true);
-        
+
         $request = $this->getRequest();
-        
+
         foreach ($this->unsupportedFieldsInCountRequest as $field) {
             if (isset($request[$field])) {
                 unset($request[$field]);
@@ -1151,7 +1153,7 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
     {
         $this->appendAtPath('query.filtered.query.bool.must', [
             'query_string' => [
-                'query' => $searchWord
+                'query' => json_encode((string)$searchWord)
             ]
         ]);
 
@@ -1223,6 +1225,28 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
         }
 
         $this->contextNode = $contextNode;
+
+        return $this;
+    }
+
+    /**
+     * Modify a part of the Elasticsearch Request denoted by $path, merging together
+     * the existing values and the passed-in values.
+     *
+     * @param string $path
+     * @param mixed $requestPart
+     * @return $this
+     */
+    public function request($path, $requestPart)
+    {
+        $valueAtPath = Arrays::getValueByPath($this->request, $path);
+        if (is_array($valueAtPath)) {
+            $result = Arrays::arrayMergeRecursiveOverrule($valueAtPath, $requestPart);
+        } else {
+            $result = $requestPart;
+        }
+
+        $this->request = Arrays::setValueByPath($this->request, $path, $result);
 
         return $this;
     }
