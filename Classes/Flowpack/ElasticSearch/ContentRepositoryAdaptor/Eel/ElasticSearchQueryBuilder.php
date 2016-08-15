@@ -1151,18 +1151,17 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
      */
     public function fulltext($searchWord)
     {
-        $this->appendAtPath('query.filtered.query.bool.must', [
+        $query = [
             'query_string' => [
                 'query' => json_encode((string)$searchWord)
             ]
-        ]);
+        ];
+        $this->appendAtPath('query.filtered.query.bool.must', $query);
 
         // add the query_string filter to all facets
         if (isset($this->request['aggregations']['facets']['aggregations'])) {
             foreach ($this->request['aggregations']['facets']['aggregations'] as $aggregationName => &$facetAggregation) {
-                $facetAggregation['filter']['bool']['must'][]['query_string'] = [
-                    'query' => $searchWord
-                ];
+                $facetAggregation['filter']['bool']['must'][]['query']['query_string'] = $query['query_string'];
             }
         }
 
