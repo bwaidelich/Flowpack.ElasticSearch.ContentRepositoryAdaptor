@@ -1170,6 +1170,35 @@ class ElasticSearchQueryBuilder implements QueryBuilderInterface, ProtectedConte
     }
 
     /**
+     * Match the searchword against arbitrary search fields
+     *
+     * @param string $searchWord
+     * @param array $fields
+     * @return QueryBuilderInterface
+     * @api
+     */
+    public function multiFieldFulltext($searchWord, array $fields)
+    {
+        $query = [
+            'query_string' => [
+                'fields' => $fields,
+                'query' => $searchWord
+            ]
+        ];
+        $this->appendAtPath('query.filtered.query.bool.must', $query);
+
+        // add the query_string filter to all facets
+        if (isset($this->request['aggregations']['facets']['aggregations'])) {
+            foreach ($this->request['aggregations']['facets']['aggregations'] as $aggregationName => &$facetAggregation) {
+                $facetAggregation['filter']['bool']['must'][]['query']['query_string'] = $query['query_string'];
+            }
+        }
+
+        // We automatically enable result highlighting when doing fulltext searches. It is up to the user to use this information or not use it.
+        return $this->highlight(150, 2);
+    }
+
+    /**
      * Configure Result Highlighting. Only makes sense in combination with fulltext(). By default, highlighting is enabled.
      * It can be disabled by calling "highlight(FALSE)".
      *
