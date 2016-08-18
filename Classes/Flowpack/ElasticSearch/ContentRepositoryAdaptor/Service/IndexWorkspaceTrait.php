@@ -11,6 +11,7 @@ namespace Flowpack\ElasticSearch\ContentRepositoryAdaptor\Service;
  * The TYPO3 project - inspiring people to share!                                                   *
  *                                                                                                  */
 
+use Flowpack\ElasticSearch\ContentRepositoryAdaptor\IndexNodeJob;
 use TYPO3\Flow\Annotations as Flow;
 use TYPO3\TYPO3CR\Domain\Model\NodeInterface;
 
@@ -36,6 +37,12 @@ trait IndexWorkspaceTrait
      * @var \TYPO3\TYPO3CR\Search\Indexer\NodeIndexingManager
      */
     protected $nodeIndexingManager;
+
+    /**
+     * @Flow\Inject
+     * @var \Flowpack\JobQueue\Common\Job\JobManager
+     */
+    protected $jobManager;
 
     /**
      * @param string $workspaceName
@@ -75,7 +82,9 @@ trait IndexWorkspaceTrait
             if ($limit !== null && $indexedNodes > $limit) {
                 return;
             }
-            $this->nodeIndexingManager->indexNode($currentNode);
+
+            $this->jobManager->queue('nodeindex', new IndexNodeJob($currentNode));
+            #$this->nodeIndexingManager->indexNode($currentNode);
             $indexedNodes++;
             array_map(function (NodeInterface $childNode) use ($traverseNodes, &$indexedNodes) {
                 $traverseNodes($childNode, $indexedNodes);
@@ -86,7 +95,7 @@ trait IndexWorkspaceTrait
 
         $this->nodeFactory->reset();
         $context->getFirstLevelNodeCache()->flush();
-         
+
         if ($callback !== null) {
             $callback($workspaceName, $indexedNodes, $dimensions);
         }
